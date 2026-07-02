@@ -234,8 +234,9 @@ if __name__ == "__main__":
         stream=sys.stdout,
     )
 
+    from data_paths import resolve_data_root
     _script_dir = Path(__file__).resolve().parent
-    _data_root = _script_dir / "Data" / "allData"
+    _data_root = resolve_data_root(_script_dir)
     _results_dir = _script_dir / "results"
     _results_dir.mkdir(parents=True, exist_ok=True)
 

@@ -24,8 +24,8 @@ import pandas as pd
 
 from portfolio_state import PortfolioState
 from execution_engine import ExecutionEngine, TradeRecord
-from instrument_selector import select_strike
 from day_lifecycle import get_day_lifecycle_rules, SESSION_START_TIME, SESSION_END_TIME
+from strategies import MarketState, Strategy, get_strategy
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +39,14 @@ def run_single_day(
     underlier: str,
     second_grid: pd.DataFrame,
     strike_lookup: dict[int | float, tuple[str, str]],
+    strategy: Strategy,
 ) -> tuple[list[TradeRecord], list[dict], list[dict]]:
     """Run the backtest for one (trade_date, underlier).
+
+    The engine is strategy-agnostic: it asks `strategy` for target holdings at
+    every second and executes the diff from current holdings. The only rule the
+    engine imposes over the strategy is the end-of-day forced square-off
+    (SPEC.md Rule 10), which overrides the target to flat at the final second.
 
     Parameters
     ----------
@@ -53,6 +59,9 @@ def run_single_day(
         Column "futures_price" + one column per option instrument.
     strike_lookup : dict
         Maps eligible strike -> (ce_instrument_name, pe_instrument_name).
+    strategy : Strategy
+        A fresh strategy instance for this (trade_date, underlier). It declares
+        desired target positions; it never books trades or reads the portfolio.
 
     Returns
     -------
@@ -78,37 +87,26 @@ def run_single_day(
     for ts in second_grid.index:
         # ---- 1. Read market state at this second --------------------------
         row = second_grid.loc[ts]
-        futures_price = row.get("futures_price")
 
         # ---- 2. Determine target holdings ---------------------------------
+        # The engine imposes exactly one rule over the strategy: the end-of-day
+        # forced square-off. Everything else is the strategy's decision. Per
+        # ASSUMPTIONS.md A5, a strategy that cannot price both legs of its
+        # desired strike returns {} (flat), and the engine exits any open pair.
         is_squareoff = lifecycle.is_forced_squareoff(ts)
 
         if is_squareoff:
-            # Override: target is flat regardless of strategy.
             target_holdings: dict[str, int] = {}
-            selected_strike = None
         else:
-            # Use strategy logic: closest strike.
-            selected_strike = select_strike(futures_price, available_strikes)
-
-            if selected_strike is not None:
-                ce_instr, pe_instr = strike_lookup[selected_strike]
-
-                # Check both legs have valid prices (A5).
-                ce_price = row.get(ce_instr)
-                pe_price = row.get(pe_instr)
-                ce_ok = ce_price is not None and not (isinstance(ce_price, float) and math.isnan(ce_price))
-                pe_ok = pe_price is not None and not (isinstance(pe_price, float) and math.isnan(pe_price))
-
-                if ce_ok and pe_ok:
-                    target_holdings = {ce_instr: 1, pe_instr: 1}
-                else:
-                    # Can't enter/roll — keep current or stay flat.
-                    target_holdings = {k: v for k, v in portfolio.current_positions.items() if v > 0}
-                    selected_strike = None
-            else:
-                # No valid strike — keep current or stay flat.
-                target_holdings = {k: v for k, v in portfolio.current_positions.items() if v > 0}
+            market_state = MarketState(
+                trade_date=trade_date,
+                underlier=underlier,
+                timestamp=ts,
+                grid_row=row,
+                strike_lookup=strike_lookup,
+                available_strikes=available_strikes,
+            )
+            target_holdings = strategy.get_target_positions(ts, market_state)
 
         # ---- 3. Build current market prices dict for held + target --------
         all_instruments = portfolio.held_instruments() | {k for k, v in target_holdings.items() if v > 0}
@@ -141,7 +139,6 @@ def run_single_day(
         # ---- 7. Log position state changes --------------------------------
         held = portfolio.held_instruments()
         if held:
-            held_sorted = sorted(held)
             # Determine current strike from held instruments.
             current_strike = None
             current_ce = None
@@ -157,22 +154,19 @@ def run_single_day(
             pos_state = None
 
         if pos_state != last_position_state:
-            # Determine trigger.
-            if last_position_state is None and pos_state is not None:
-                if lifecycle.is_session_start(ts):
-                    trigger = "ENTRY"
-                else:
-                    trigger = "ENTRY"
-            elif last_position_state is not None and pos_state is None:
-                if is_squareoff:
-                    trigger = "SQUAREOFF"
-                else:
-                    trigger = "FLAT_NO_PRICE"
-            elif last_position_state is not None and pos_state is not None:
-                trigger = "ROLL"
+            # Determine trigger for this state transition.
+            if last_position_state is None:
+                # flat -> holding: first entry of the day, or re-entry after a flat gap.
+                trigger = "ENTRY"
+            elif pos_state is None:
+                # holding -> flat: forced square-off, or an A5 exit with no re-entry.
+                trigger = "SQUAREOFF" if is_squareoff else "FLAT_NO_PRICE"
             else:
-                trigger = "SESSION_START"
+                # holding -> holding at a different strike.
+                trigger = "ROLL"
 
+            # A HOLDING state row begins exactly at the second the pair is
+            # entered/rolled, so each leg's entry timestamp is this second.
             positions_log.append({
                 "trade_date": trade_date,
                 "timestamp": ts,
@@ -181,8 +175,10 @@ def run_single_day(
                 "strike": pos_state[0] if pos_state else None,
                 "ce_instrument": pos_state[1] if pos_state else None,
                 "ce_entry_price": portfolio.entry_prices.get(pos_state[1]) if pos_state else None,
+                "ce_entry_timestamp": ts if pos_state else None,
                 "pe_instrument": pos_state[2] if pos_state else None,
                 "pe_entry_price": portfolio.entry_prices.get(pos_state[2]) if pos_state else None,
+                "pe_entry_timestamp": ts if pos_state else None,
                 "trigger": trigger,
             })
             last_position_state = pos_state
@@ -204,8 +200,13 @@ def run_full_backtest(
     trade_dates: list[str],
     grids: dict[tuple[str, str], pd.DataFrame],
     strike_map: dict[tuple[str, str], pd.DataFrame],
+    strategy_key: str = "closest_strike_straddle",
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Run the backtest across all days and both underliers.
+    """Run the backtest across all days and both underliers for one strategy.
+
+    A FRESH strategy instance is created per (trade_date, underlier) via
+    ``get_strategy(strategy_key)``, so stateful strategies reset each day and
+    NIFTY/BANKNIFTY stay independent (ASSUMPTIONS.md A12).
 
     Parameters
     ----------
@@ -215,6 +216,8 @@ def run_full_backtest(
         Second-grid DataFrames from build_all_second_grids.
     strike_map : dict[(trade_date, underlier), pd.DataFrame]
         From build_strike_map (Step 3.1).
+    strategy_key : str
+        Registry key of the strategy to run (see the ``strategies/`` package).
 
     Returns
     -------
@@ -248,8 +251,12 @@ def run_full_backtest(
                 logger.warning("[%s] %s: no eligible strikes, skipping.", trade_date, underlier)
                 continue
 
+            # Fresh strategy instance per (date, underlier): resets any per-day
+            # internal state and keeps the two underliers independent (A12).
+            strategy = get_strategy(strategy_key)
+
             day_trades, day_mtm, day_positions = run_single_day(
-                trade_date, underlier, grid, strike_lookup,
+                trade_date, underlier, grid, strike_lookup, strategy,
             )
 
             all_trades.extend(day_trades)
@@ -309,8 +316,9 @@ if __name__ == "__main__":
     from second_grid_builder import build_all_second_grids
     from strike_map import build_strike_map
 
+    from data_paths import resolve_data_root
     SCRIPT_DIR = Path(__file__).resolve().parent
-    DATA_ROOT = SCRIPT_DIR / "Data" / "allData"
+    DATA_ROOT = resolve_data_root(SCRIPT_DIR)
     RESULTS_DIR = SCRIPT_DIR / "results"
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 

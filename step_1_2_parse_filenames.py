@@ -22,7 +22,8 @@ from option_filename_parser import parse_option_filename
 # Configuration
 # ---------------------------------------------------------------------------
 SCRIPT_DIR = Path(__file__).resolve().parent
-DATA_ROOT = SCRIPT_DIR / "Data" / "allData"
+from data_paths import resolve_data_root
+DATA_ROOT = resolve_data_root(SCRIPT_DIR)
 RESULTS_DIR = SCRIPT_DIR / "results"
 OUTPUT_CSV = RESULTS_DIR / "option_metadata.csv"
 

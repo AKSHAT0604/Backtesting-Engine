@@ -39,15 +39,17 @@ Each row represents one atomic fill. A roll produces 4 rows. An initial entry pr
 | `expiry` | `YYYY-MM-DD` | Expiry date of the option contract (parsed from filename). |
 | `strike` | integer | Strike price of the option contract (parsed from filename). |
 | `option_type` | string | `CE` or `PE`. |
-| `instrument` | string | Full instrument identifier as encoded in the filename, without `.csv` extension (e.g. `NIFTY22110317300CE`). |
+| `instrument_name` | string | Full instrument identifier as encoded in the filename, without `.csv` extension (e.g. `NIFTY22110317300CE`). |
 | `direction` | string | `BUY` (entering a long position) or `SELL` (exiting a long position). |
 | `price` | float | Fill price — the marked price on the 1-second grid at `timestamp` for this instrument (per A8). |
 | `quantity` | integer | Always `1` (per SPEC.md Rule 6). |
 | `reason` | string | One of: `ENTRY` (initial day entry per A13), `ROLL` (strike change per Rule 9), `SQUAREOFF` (end-of-day close per Rule 10). |
 
-**Sort order:** `trade_date` ASC, `timestamp` ASC, `underlier` ASC, `direction` ASC (SELL before BUY within a roll, so exits precede entries).
+**Column name note:** the identifier column is emitted as `instrument_name` (not `instrument`). `expiry`, `strike`, and `option_type` are parsed from that name and included so the file is self-describing without re-parsing.
 
-**Row count identity:** Per underlier per day: `(2 × entries) + (4 × rolls) + (2 × squareoffs)` per A17.
+**Sort order:** `trade_date` ASC, `timestamp` ASC; within a single roll timestamp, SELL fills precede BUY fills so exits are booked before entries.
+
+**Row count identity:** In the clean case, per underlier per day: `(2 × entries) + (4 × rolls) + (2 × squareoffs)` per A17. Under ASSUMPTIONS.md A5, a strike change whose new legs are momentarily unpriced is split into an exit now (2 SELL fills) and a re-entry later (2 BUY fills), so fills are not always an exact multiple of 4. The authoritative roll count is therefore `num_rolls` in D6 (counted from strike-change events in D4), not `ROLL fills ÷ 4`.
 
 ---
 
@@ -74,13 +76,17 @@ Each row represents a position state that **begins** at the given timestamp and 
 | `pe_instrument` | string or null | Full PE instrument identifier (e.g. `NIFTY22110317300PE`). Null when `state` = `FLAT`. |
 | `pe_entry_price` | float or null | Price at which the PE was entered. Null when `state` = `FLAT`. |
 | `pe_entry_timestamp` | `YYYY-MM-DD HH:MM:SS` or null | Timestamp at which the PE was entered. Null when `state` = `FLAT`. |
-| `trigger` | string | What caused this state: `SESSION_START`, `ENTRY`, `ROLL`, `FLAT_NO_PRICE` (new strike lacks valid price per A5), `SQUAREOFF`. |
+| `ce_entry_timestamp` | `YYYY-MM-DD HH:MM:SS` or null | Second at which the CE leg was entered (equals `timestamp` of this HOLDING row). Null when `state` = `FLAT`. |
+| `pe_entry_timestamp` | `YYYY-MM-DD HH:MM:SS` or null | Second at which the PE leg was entered (equals `timestamp` of this HOLDING row). Null when `state` = `FLAT`. |
+| `trigger` | string | What caused this state: `ENTRY` (first entry of the day, or re-entry after a flat gap), `ROLL` (strike change per Rule 9), `FLAT_NO_PRICE` (position exited because the new closest strike lacks a valid price per A5, with no re-entry yet), `SQUAREOFF` (end-of-day close per Rule 10). |
+
+**Granularity note:** only state *changes* are logged (not one row per second), so the timeline is compact. The position at any arbitrary second is the most recent row with `timestamp` ≤ that second for that underlier.
 
 **Sort order:** `trade_date` ASC, `underlier` ASC, `timestamp` ASC.
 
-**First row per day per underlier:** Always has `trigger` = `SESSION_START`, `state` = `FLAT`, `timestamp` = `09:15:00`.
+**First row per day per underlier:** The first `ENTRY` row, at the first second both legs of the closest strike are priced (usually `09:15:00`, later if the ATM legs open late). The engine does not emit a separate `SESSION_START` placeholder row — the day simply begins with the first entry. If no strike is ever tradable that day the underlier stays flat and produces no HOLDING rows (per A20).
 
-**Last row per day per underlier:** Always has `trigger` = `SQUAREOFF`, `state` = `FLAT` (unless the strategy was already flat, in which case the last row is whatever preceded session end).
+**Last row per day per underlier:** Always `trigger` = `SQUAREOFF`, `state` = `FLAT`, at `15:29:59` — unless the underlier was already flat into the close, in which case the last row is whatever preceded session end.
 
 ---
 

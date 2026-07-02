@@ -43,7 +43,8 @@ from day_lifecycle import get_day_lifecycle_rules
 TEST_DATE = "2022-11-01"
 TEST_UNDERLIER = "NIFTY"
 SCRIPT_DIR = Path(__file__).resolve().parent
-DATA_ROOT = SCRIPT_DIR / "Data" / "allData"
+from data_paths import resolve_data_root
+DATA_ROOT = resolve_data_root(SCRIPT_DIR)
 RESULTS_DIR = SCRIPT_DIR / "results"
 OUTPUT_CSV = RESULTS_DIR / "debug_reconciliation.csv"
 
