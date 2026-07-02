@@ -19,10 +19,10 @@ logging.basicConfig(
     stream=sys.stdout,
 )
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-from data_paths import resolve_data_root
-DATA_ROOT = resolve_data_root(SCRIPT_DIR)
-RESULTS_DIR = SCRIPT_DIR / "results"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "engine"))
+from data_paths import resolve_data_root, results_dir
+DATA_ROOT = resolve_data_root()
+RESULTS_DIR = results_dir()
 
 
 # ===================================================================

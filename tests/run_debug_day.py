@@ -27,6 +27,9 @@ logger = logging.getLogger("debug_day")
 import warnings
 warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)
 
+# Engine modules live in ../engine — put it on the path before importing them.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "engine"))
+
 from futures_loader import load_all_futures
 from filtered_option_universe import build_filtered_option_universe
 from second_grid_builder import build_all_second_grids
@@ -42,10 +45,9 @@ from day_lifecycle import get_day_lifecycle_rules
 # ---------------------------------------------------------------------------
 TEST_DATE = "2022-11-01"
 TEST_UNDERLIER = "NIFTY"
-SCRIPT_DIR = Path(__file__).resolve().parent
-from data_paths import resolve_data_root
-DATA_ROOT = resolve_data_root(SCRIPT_DIR)
-RESULTS_DIR = SCRIPT_DIR / "results"
+from data_paths import resolve_data_root, results_dir
+DATA_ROOT = resolve_data_root()
+RESULTS_DIR = results_dir()
 OUTPUT_CSV = RESULTS_DIR / "debug_reconciliation.csv"
 
 

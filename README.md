@@ -62,20 +62,41 @@ All 20 resolved assumptions are in **[`../ASSUMPTIONS.md`](../ASSUMPTIONS.md)**
 
 The pipeline is a clean sequence of small, independently runnable modules:
 
-| Stage | Module | Output |
+### Repository layout
+
+```text
+Backtesting-Engine/
+  run_strategy.py         # main entry point (run one/all strategies)
+  README.md
+  backtest_report.ipynb   # static matplotlib report (superseded by the dashboard)
+  engine/                 # all importable core modules + strategies/ package
+  data_cleaning/          # early-phase standalone scripts that build the results CSVs
+  tests/                  # unit / edge-case / single-day debug harnesses
+  redundant/              # superseded or one-off scripts, kept to show the dev process
+  docs/                   # DELIVERABLES.md, EDGE_CASES.md
+  dashboard/              # Streamlit + Plotly analysis portal
+  results/                # generated outputs (+ results/strategies/<key>/)
+```
+
+All importable modules live together in `engine/` so their flat imports work;
+`engine/data_paths.py` is the single source of truth for locating `results/` and
+the dataset, which is what lets scripts sit in any folder and still run. Scripts
+outside `engine/` put it on `sys.path` at startup.
+
+| Stage | Module (`engine/` unless noted) | Output |
 |---|---|---|
-| Inventory / parse | `step_1_1_dataset_inventory.py`, `option_filename_parser.py` | `results/option_metadata.csv` |
-| Nearest expiry | `nearest_expiry_selector.py` | `results/nearest_expiry.csv` |
+| Inventory / parse | `data_cleaning/step_1_1_…`, `data_cleaning/step_1_2_…`, `option_filename_parser.py` | `results/option_metadata.csv` |
+| Nearest expiry | `data_cleaning/nearest_expiry_selector.py` | `results/nearest_expiry.csv` |
 | Filtered universe | `filtered_option_universe.py` | `results/filtered_option_universe.csv` |
 | Futures load | `futures_loader.py` | standardized futures frames |
 | 1-second grid | `second_grid_builder.py` | per-day wide price grids |
 | Strike map | `strike_map.py` | eligible (both-legs) strikes |
 | Strike selection | `instrument_selector.py` | `select_strike`, target pair |
-| **Strategy** | `strategies/` package | target positions per second |
+| **Strategy** | `engine/strategies/` package | target positions per second |
 | **Engine** | `backtest_runner.py` | trades / MTM / positions |
 | Portfolio / execution | `portfolio_state.py`, `execution_engine.py` | ledger + fills |
 | Reporting | `reporting.py` | enriched trades + D6 daily summary |
-| Orchestration | `run_strategy.py` | writes all outputs per strategy |
+| Orchestration | `run_strategy.py` (repo root) | writes all outputs per strategy |
 
 **The key design choice — strategy/engine decoupling.** A strategy is a *pure
 function* of `(timestamp, MarketState) → {instrument: 1}` desired holdings. It
@@ -88,7 +109,7 @@ makes strategies swappable without touching the engine, execution, or accounting
 Strategies live in **`strategies/`** and self-register via a decorator:
 
 ```python
-# strategies/my_strategy.py
+# engine/strategies/my_strategy.py
 from strategies.base import Strategy, MarketState, register_strategy
 
 @register_strategy(key="my_strategy", name="My Strategy", description="…")
@@ -98,7 +119,7 @@ class MyStrategy(Strategy):
         return market_state.pair_if_tradable(strike)   # {ce:1, pe:1} or {}
 ```
 
-**To add a strategy you only add one file in `strategies/`.** Auto-discovery
+**To add a strategy you only add one file in `engine/strategies/`.** Auto-discovery
 registers it, so the engine can run it (`python run_strategy.py --strategy my_strategy`)
 and the dashboard lists it in the strategy dropdown — no other edits. A fresh
 strategy instance is created per (day, underlier), so strategies may hold internal
@@ -119,10 +140,10 @@ Bundled strategies:
 pip install -r dashboard/requirements.txt
 
 # 2. One-time prep of metadata/expiry/universe CSVs (already in results/)
-python step_1_1_dataset_inventory.py
-python step_1_2_parse_filenames.py
-python nearest_expiry_selector.py
-python filtered_option_universe.py
+python data_cleaning/step_1_1_dataset_inventory.py
+python data_cleaning/step_1_2_parse_filenames.py
+python data_cleaning/nearest_expiry_selector.py
+python engine/filtered_option_universe.py
 
 # 3. Run the backtest — all strategies, or one
 python run_strategy.py --all
@@ -145,7 +166,7 @@ also mirrored to `results/` root for the notebook):
 | `mtm_timeline.csv` | D5 | Per-second realized/unrealized/total PnL for NIFTY, BANKNIFTY, and combined. |
 | `daily_summary.csv` | D6 | One row per (date, underlier): trade/roll counts, gross PnL, first-entry/last-roll times, unique strikes held, max favorable/adverse excursion. |
 
-Full schema definitions are in [`DELIVERABLES.md`](DELIVERABLES.md).
+Full schema definitions are in [`docs/DELIVERABLES.md`](docs/DELIVERABLES.md).
 
 ## 8. Interactive analysis portal
 
@@ -185,5 +206,5 @@ is selected.)
 ---
 
 *Governing documents: [`../SPEC.md`](../SPEC.md) (rules), [`../ASSUMPTIONS.md`](../ASSUMPTIONS.md)
-(assumptions), [`DELIVERABLES.md`](DELIVERABLES.md) (output schemas),
-[`EDGE_CASES.md`](EDGE_CASES.md) (edge-case handling).*
+(assumptions), [`docs/DELIVERABLES.md`](docs/DELIVERABLES.md) (output schemas),
+[`docs/EDGE_CASES.md`](docs/EDGE_CASES.md) (edge-case handling).*

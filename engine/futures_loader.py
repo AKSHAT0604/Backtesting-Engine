@@ -234,11 +234,9 @@ if __name__ == "__main__":
         stream=sys.stdout,
     )
 
-    from data_paths import resolve_data_root
-    _script_dir = Path(__file__).resolve().parent
-    _data_root = resolve_data_root(_script_dir)
-    _results_dir = _script_dir / "results"
-    _results_dir.mkdir(parents=True, exist_ok=True)
+    from data_paths import resolve_data_root, results_dir
+    _data_root = resolve_data_root()
+    _results_dir = results_dir()
 
     # Discover trade dates from folder names.
     _trade_dates = []

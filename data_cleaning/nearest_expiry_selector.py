@@ -108,9 +108,11 @@ if __name__ == "__main__":
         stream=sys.stdout,
     )
 
-    SCRIPT_DIR = Path(__file__).resolve().parent
-    METADATA_CSV = SCRIPT_DIR / "results" / "option_metadata.csv"
-    OUTPUT_CSV = SCRIPT_DIR / "results" / "nearest_expiry.csv"
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "engine"))
+    from data_paths import results_dir
+    RESULTS_DIR = results_dir()
+    METADATA_CSV = RESULTS_DIR / "option_metadata.csv"
+    OUTPUT_CSV = RESULTS_DIR / "nearest_expiry.csv"
 
     print("=" * 70)
     print("STEP 2.2 — NEAREST EXPIRY SELECTION")

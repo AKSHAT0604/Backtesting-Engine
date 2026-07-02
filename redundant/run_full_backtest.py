@@ -2,12 +2,17 @@ import pandas as pd
 from pathlib import Path
 import sys
 
+# NOTE: superseded by run_strategy.py + engine/reporting.py (kept for history).
+# Engine modules live in ../engine — put it on the path to reuse shared paths.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "engine"))
+
 def main():
     print("=" * 70)
     print("PHASE 7/8 — GENERATING DAILY SUMMARY")
     print("=" * 70)
 
-    RESULTS_DIR = Path("results")
+    from data_paths import results_dir
+    RESULTS_DIR = results_dir()
     trades_path = RESULTS_DIR / "trades.csv"
     mtm_path = RESULTS_DIR / "mtm_timeline.csv"
 

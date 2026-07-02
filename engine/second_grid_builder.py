@@ -231,11 +231,9 @@ if __name__ == "__main__":
     from futures_loader import load_all_futures
     from filtered_option_universe import build_filtered_option_universe
 
-    from data_paths import resolve_data_root
-    SCRIPT_DIR = Path(__file__).resolve().parent
-    DATA_ROOT = resolve_data_root(SCRIPT_DIR)
-    RESULTS_DIR = SCRIPT_DIR / "results"
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    from data_paths import resolve_data_root, results_dir
+    DATA_ROOT = resolve_data_root()
+    RESULTS_DIR = results_dir()
 
     # ---- Discover trade dates ---------------------------------------------
     import re

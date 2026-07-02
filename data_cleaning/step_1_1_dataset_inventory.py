@@ -15,15 +15,18 @@ Usage:
 
 import os
 import re
+import sys
 from pathlib import Path
+
+# Engine modules live in ../engine — put it on the path before importing them.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "engine"))
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-SCRIPT_DIR = Path(__file__).resolve().parent
-from data_paths import resolve_data_root
-DATA_ROOT = resolve_data_root(SCRIPT_DIR)
-RESULTS_DIR = SCRIPT_DIR / "results"
+from data_paths import resolve_data_root, results_dir
+DATA_ROOT = resolve_data_root()
+RESULTS_DIR = results_dir()
 OUTPUT_CSV = RESULTS_DIR / "dataset_inventory.csv"
 
 FOLDER_PATTERN = re.compile(r"^NSE_(\d{8})$")

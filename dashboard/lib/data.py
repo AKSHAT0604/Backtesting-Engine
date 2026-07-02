@@ -20,17 +20,18 @@ import streamlit as st
 
 APP_DIR = Path(__file__).resolve().parent.parent          # .../dashboard
 ENGINE_DIR = APP_DIR.parent                                # .../Backtesting-Engine
+ENGINE_CODE_DIR = ENGINE_DIR / "engine"                    # importable engine modules
 RESULTS_DIR = ENGINE_DIR / "results"
 STRATEGIES_RESULTS_DIR = RESULTS_DIR / "strategies"
 
-if str(ENGINE_DIR) not in sys.path:
-    sys.path.insert(0, str(ENGINE_DIR))
+if str(ENGINE_CODE_DIR) not in sys.path:
+    sys.path.insert(0, str(ENGINE_CODE_DIR))
 
 from futures_loader import load_futures_file  # noqa: E402  (reuse existing loader)
 from strategies import get_registry            # noqa: E402  (strategy registry)
 from data_paths import resolve_data_root       # noqa: E402  (shared data-root resolver)
 
-DATA_ROOT = resolve_data_root(ENGINE_DIR)
+DATA_ROOT = resolve_data_root()
 DEFAULT_STRATEGY = "closest_strike_straddle"
 
 

@@ -14,8 +14,12 @@ from __future__ import annotations
 
 import math
 import sys
+from pathlib import Path
 
 import pandas as pd
+
+# Engine modules live in ../engine — put it on the path before importing them.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "engine"))
 
 from portfolio_state import PortfolioState
 from execution_engine import ExecutionEngine

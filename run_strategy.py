@@ -32,6 +32,9 @@ from pathlib import Path
 
 import pandas as pd
 
+# The importable engine modules live in ./engine — put it on the path first.
+sys.path.insert(0, str(Path(__file__).resolve().parent / "engine"))
+
 from futures_loader import load_all_futures
 from filtered_option_universe import build_filtered_option_universe
 from second_grid_builder import build_all_second_grids
@@ -39,14 +42,12 @@ from strike_map import build_strike_map
 from backtest_runner import run_full_backtest
 from reporting import enrich_trades, build_daily_summary
 from strategies import get_registry
+from data_paths import resolve_data_root, results_dir
 
 logger = logging.getLogger(__name__)
 
-from data_paths import resolve_data_root
-
-SCRIPT_DIR = Path(__file__).resolve().parent
-DATA_ROOT = resolve_data_root(SCRIPT_DIR)
-RESULTS_DIR = SCRIPT_DIR / "results"
+DATA_ROOT = resolve_data_root()
+RESULTS_DIR = results_dir()
 STRATEGIES_RESULTS_DIR = RESULTS_DIR / "strategies"
 DEFAULT_STRATEGY = "closest_strike_straddle"
 

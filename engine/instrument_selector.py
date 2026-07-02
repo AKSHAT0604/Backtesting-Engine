@@ -239,10 +239,9 @@ def _run_smoke_test():
     from second_grid_builder import build_all_second_grids
     from strike_map import build_strike_map, get_eligible_strikes
 
-    from data_paths import resolve_data_root
-    SCRIPT_DIR = Path(__file__).resolve().parent
-    DATA_ROOT = resolve_data_root(SCRIPT_DIR)
-    RESULTS_DIR = SCRIPT_DIR / "results"
+    from data_paths import resolve_data_root, results_dir
+    DATA_ROOT = resolve_data_root()
+    RESULTS_DIR = results_dir()
 
     TEST_DATE = "2022-11-01"
     TEST_UNDERLIER = "NIFTY"

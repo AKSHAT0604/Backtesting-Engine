@@ -156,9 +156,8 @@ if __name__ == "__main__":
         stream=sys.stdout,
     )
 
-    SCRIPT_DIR = Path(__file__).resolve().parent
-    RESULTS_DIR = SCRIPT_DIR / "results"
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    from data_paths import results_dir
+    RESULTS_DIR = results_dir()
 
     METADATA_CSV = RESULTS_DIR / "option_metadata.csv"
     EXPIRY_CSV = RESULTS_DIR / "nearest_expiry.csv"

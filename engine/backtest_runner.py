@@ -316,11 +316,9 @@ if __name__ == "__main__":
     from second_grid_builder import build_all_second_grids
     from strike_map import build_strike_map
 
-    from data_paths import resolve_data_root
-    SCRIPT_DIR = Path(__file__).resolve().parent
-    DATA_ROOT = resolve_data_root(SCRIPT_DIR)
-    RESULTS_DIR = SCRIPT_DIR / "results"
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    from data_paths import resolve_data_root, results_dir
+    DATA_ROOT = resolve_data_root()
+    RESULTS_DIR = results_dir()
 
     # ---- Discover trade dates ---------------------------------------------
     _FOLDER_RE = re.compile(r"^NSE_(\d{8})$")
