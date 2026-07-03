@@ -48,14 +48,33 @@ def strategy_dir(strategy_key: str) -> Path:
     return STRATEGIES_RESULTS_DIR / strategy_key
 
 
+def _exists_either(base: Path) -> bool:
+    """True if base.parquet or base.csv exists (base has no extension)."""
+    return base.with_suffix(".parquet").is_file() or base.with_suffix(".csv").is_file()
+
+
 def strategy_results_available(strategy_key: str) -> bool:
     d = strategy_dir(strategy_key)
-    return all((d / f).is_file() for f in
-               ("trades.csv", "positions_timeline.csv", "mtm_timeline.csv", "daily_summary.csv"))
+    return all(_exists_either(d / name) for name in
+               ("trades", "positions_timeline", "mtm_timeline", "daily_summary"))
 
 
 def clear_caches() -> None:
     st.cache_data.clear()
+
+
+def _read_table(base: Path) -> pd.DataFrame:
+    """Read base.parquet if present (deployment copy), else base.csv (dev copy).
+
+    Parquet is what export_parquet.py produces for the heavy per-strategy
+    files — 5-10x smaller and faster to load, which is what actually ships to
+    Streamlit Community Cloud. Falling back to CSV keeps local dev working
+    without requiring the export step after every backtest run.
+    """
+    parquet_path = base.with_suffix(".parquet")
+    if parquet_path.is_file():
+        return pd.read_parquet(parquet_path, engine="pyarrow")
+    return pd.read_csv(base.with_suffix(".csv"))
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +83,7 @@ def clear_caches() -> None:
 
 @st.cache_data
 def load_trades(strategy_key: str) -> pd.DataFrame:
-    df = pd.read_csv(strategy_dir(strategy_key) / "trades.csv")
+    df = _read_table(strategy_dir(strategy_key) / "trades")
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     if "option_type" not in df.columns:
         df["option_type"] = df["instrument_name"].str[-2:]
@@ -73,14 +92,14 @@ def load_trades(strategy_key: str) -> pd.DataFrame:
 
 @st.cache_data
 def load_positions(strategy_key: str) -> pd.DataFrame:
-    df = pd.read_csv(strategy_dir(strategy_key) / "positions_timeline.csv")
+    df = _read_table(strategy_dir(strategy_key) / "positions_timeline")
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     return df
 
 
 @st.cache_data
 def load_mtm(strategy_key: str) -> pd.DataFrame:
-    df = pd.read_csv(strategy_dir(strategy_key) / "mtm_timeline.csv")
+    df = _read_table(strategy_dir(strategy_key) / "mtm_timeline")
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     return df
 
@@ -88,8 +107,7 @@ def load_mtm(strategy_key: str) -> pd.DataFrame:
 @st.cache_data
 def load_daily_summary_raw(strategy_key: str) -> pd.DataFrame:
     """The DELIVERABLES.md D6 schema: one row per (trade_date, underlier)."""
-    df = pd.read_csv(strategy_dir(strategy_key) / "daily_summary.csv")
-    return df
+    return _read_table(strategy_dir(strategy_key) / "daily_summary")
 
 
 @st.cache_data
