@@ -1,3 +1,5 @@
+from datetime import date
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -12,8 +14,15 @@ if not ui.ensure_results_or_prompt(strategy_key):
     st.stop()
 st.caption(f"Strategy: **{data.get_strategy_registry()[strategy_key].name}**")
 
+view = ui.render_view_filter(strategy_key)
+
 all_dates = data.get_trade_dates(strategy_key)
-default_date = st.session_state.get("selected_date", all_dates[0])
+if view["mode"] != "full":
+    windowed = [d for d in all_dates if view["start"] <= date.fromisoformat(d) <= view["end"]]
+    if windowed:
+        all_dates = windowed
+
+default_date = view["start"].strftime("%Y-%m-%d") if view["mode"] == "day" else st.session_state.get("selected_date", all_dates[0])
 if default_date not in all_dates:
     default_date = all_dates[0]
 
@@ -61,17 +70,17 @@ fig = go.Figure()
 if underlier_view in ("Combined", "NIFTY"):
     fig.add_trace(go.Scatter(x=day_mtm["timestamp"], y=day_mtm["nifty_total_pnl"],
                               name="NIFTY", mode="lines",
-                              line=dict(color=theme.UNDERLIER_COLOR["NIFTY"], width=2),
+                              line=dict(color=theme.underlier_color("NIFTY"), width=2),
                               hovertemplate="%{x|%H:%M:%S}<br>NIFTY: %{y:,.1f}<extra></extra>"))
 if underlier_view in ("Combined", "BANKNIFTY"):
     fig.add_trace(go.Scatter(x=day_mtm["timestamp"], y=day_mtm["banknifty_total_pnl"],
                               name="BANKNIFTY", mode="lines",
-                              line=dict(color=theme.UNDERLIER_COLOR["BANKNIFTY"], width=2),
+                              line=dict(color=theme.underlier_color("BANKNIFTY"), width=2),
                               hovertemplate="%{x|%H:%M:%S}<br>BANKNIFTY: %{y:,.1f}<extra></extra>"))
 if underlier_view == "Combined":
     fig.add_trace(go.Scatter(x=day_mtm["timestamp"], y=day_mtm["combined_total_pnl"],
                               name="Combined", mode="lines",
-                              line=dict(color=theme.TEXT_PRIMARY, width=2, dash="dot"),
+                              line=dict(color=theme.ink_color(), width=2, dash="dot"),
                               hovertemplate="%{x|%H:%M:%S}<br>Combined: %{y:,.1f}<extra></extra>"))
 
 roll_times = day_positions.loc[day_positions["trigger"] == "ROLL", "timestamp"]
@@ -107,10 +116,10 @@ else:
 
         f2 = go.Figure()
         f2.add_trace(go.Scatter(x=fut["timestamp"], y=fut["price"], name="Futures price",
-                                 mode="lines", line=dict(color=theme.UNDERLIER_COLOR[u], width=2),
+                                 mode="lines", line=dict(color=theme.underlier_color(u), width=2),
                                  hovertemplate="%{x|%H:%M:%S}<br>Futures: %{y:,.1f}<extra></extra>"))
         f2.add_trace(go.Scatter(x=strike_series["timestamp"], y=strike_series["strike"], name="Selected strike",
-                                 mode="lines", line=dict(color=theme.TEXT_PRIMARY, width=1.5, dash="dot", shape="hv"),
+                                 mode="lines", line=dict(color=theme.ink_color(), width=1.5, dash="dot", shape="hv"),
                                  hovertemplate="%{x|%H:%M:%S}<br>Strike: %{y:,.0f}<extra></extra>"))
         theme.apply_base_layout(f2, title=u, y_title="Price", height=340)
         st.plotly_chart(f2, width='stretch')
@@ -154,11 +163,11 @@ if load_legs and data.raw_data_available():
         f3 = go.Figure()
         if not ce_all.empty:
             f3.add_trace(go.Scatter(x=ce_all["timestamp"], y=ce_all["price"], name="CE (held)",
-                                     mode="lines", line=dict(color=theme.LEG_COLOR["CE"], width=1.5),
+                                     mode="lines", line=dict(color=theme.leg_color("CE"), width=1.5),
                                      hovertemplate="%{x|%H:%M:%S}<br>CE: %{y:,.2f}<extra></extra>"))
         if not pe_all.empty:
             f3.add_trace(go.Scatter(x=pe_all["timestamp"], y=pe_all["price"], name="PE (held)",
-                                     mode="lines", line=dict(color=theme.LEG_COLOR["PE"], width=1.5),
+                                     mode="lines", line=dict(color=theme.leg_color("PE"), width=1.5),
                                      hovertemplate="%{x|%H:%M:%S}<br>PE: %{y:,.2f}<extra></extra>"))
         theme.apply_base_layout(f3, title=u, y_title="Option price", height=340)
         st.plotly_chart(f3, width='stretch')

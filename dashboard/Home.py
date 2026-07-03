@@ -15,11 +15,19 @@ strategy_key = ui.render_strategy_selector()
 if not ui.ensure_results_or_prompt(strategy_key):
     st.stop()
 
+view = ui.render_view_filter(strategy_key)
+
 registry = data.get_strategy_registry()
 st.subheader(registry[strategy_key].name)
 st.caption(registry[strategy_key].description)
 
 summary = data.load_daily_summary(strategy_key)
+summary = summary[ui.mask_by_view(summary["Date"], view)]
+ui.render_view_caption(view)
+
+if summary.empty:
+    st.warning("No trading days fall inside the selected window. Widen the range in the sidebar.")
+    st.stop()
 
 # ---------------------------------------------------------------------------
 # KPI row
@@ -31,7 +39,7 @@ worst_day = summary.loc[summary["Total PnL"].idxmin()]
 win_days = (summary["Total PnL"] > 0).sum()
 
 c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("Total PnL (month)", f"{total_pnl:,.0f}")
+c1.metric("Total PnL (window)", f"{total_pnl:,.0f}")
 c2.metric("Total rolls executed", f"{total_rolls:,}")
 c3.metric("Positive-PnL days", f"{win_days} / {len(summary)}")
 c4.metric("Best day", best_day["Date"].strftime("%b %d"), f"{best_day['Total PnL']:+.0f}")
@@ -40,15 +48,16 @@ c5.metric("Worst day", worst_day["Date"].strftime("%b %d"), f"{worst_day['Total 
 st.divider()
 
 # ---------------------------------------------------------------------------
-# Cumulative PnL (second resolution, full month)
+# Cumulative PnL (second resolution, filtered window)
 # ---------------------------------------------------------------------------
 st.subheader("Cumulative mark-to-market PnL")
 cum = data.get_full_cumulative_mtm(strategy_key)
+cum = cum[ui.mask_by_view(cum["timestamp"], view)]
 
 fig = go.Figure()
 fig.add_trace(go.Scatter(
     x=cum["timestamp"], y=cum["cumulative_pnl"],
-    mode="lines", line=dict(color=theme.BLUE, width=2),
+    mode="lines", line=dict(color=theme.polarity_colors()[0], width=2),
     fill="tozeroy", fillcolor="rgba(42,120,214,0.08)",
     name="Cumulative PnL",
     hovertemplate="%{x|%d %b %H:%M}<br>PnL: %{y:,.0f}<extra></extra>",
@@ -95,10 +104,10 @@ st.divider()
 st.subheader("Rolls executed per day, by underlier")
 roll_fig = go.Figure()
 roll_fig.add_trace(go.Bar(x=dates_str, y=summary["NIFTY Rolls"], name="NIFTY",
-                           marker_color=theme.UNDERLIER_COLOR["NIFTY"],
+                           marker_color=theme.underlier_color("NIFTY"),
                            hovertemplate="%{x}<br>NIFTY rolls: %{y}<extra></extra>"))
 roll_fig.add_trace(go.Bar(x=dates_str, y=summary["BANKNIFTY Rolls"], name="BANKNIFTY",
-                           marker_color=theme.UNDERLIER_COLOR["BANKNIFTY"],
+                           marker_color=theme.underlier_color("BANKNIFTY"),
                            hovertemplate="%{x}<br>BANKNIFTY rolls: %{y}<extra></extra>"))
 roll_fig.update_layout(barmode="group")
 theme.apply_base_layout(roll_fig, y_title="Rolls", height=340)
@@ -121,5 +130,5 @@ st.markdown(f"""
 - **{higher_turnover}** had the higher overall turnover (NIFTY: {nifty_turnover}, BANKNIFTY: {bn_turnover}).
 - The top 3 days contributed **{concentration:.1f}%** of total positive PnL — {'gains are concentrated in a few days' if concentration > 50 else 'gains are fairly spread out'}.
 - Highest single-day churn: **{churniest['Date'].strftime('%b %d')}** with {int(churniest['Total Trades Executed (Rolls)'])} rolls.
-- The month closed at a cumulative PnL of **{total_pnl:,.0f}** across {win_days} winning and {len(summary)-win_days} losing days.
+- The window closed at a cumulative PnL of **{total_pnl:,.0f}** across {win_days} winning and {len(summary)-win_days} losing days.
 """)

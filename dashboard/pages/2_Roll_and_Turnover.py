@@ -12,10 +12,21 @@ if not ui.ensure_results_or_prompt(strategy_key):
     st.stop()
 st.caption(f"Strategy: **{data.get_strategy_registry()[strategy_key].name}**")
 
+view = ui.render_view_filter(strategy_key)
+
 holding = data.holding_durations(strategy_key)
+holding = holding[ui.mask_by_view(holding["trade_date"], view)]
 turnover = data.turnover_by_hour(strategy_key)
+turnover = turnover[ui.mask_by_view(turnover["trade_date"], view)]
 rolls = data.rolls_per_day_by_underlier(strategy_key)
+rolls = rolls[ui.mask_by_view(rolls["trade_date"], view)]
 summary = data.load_daily_summary(strategy_key)
+summary = summary[ui.mask_by_view(summary["Date"], view)]
+ui.render_view_caption(view)
+
+if summary.empty or holding.empty:
+    st.warning("No trading days fall inside the selected window. Widen the range in the sidebar.")
+    st.stop()
 
 # ---------------------------------------------------------------------------
 # Holding duration distribution
@@ -25,13 +36,13 @@ st.caption("How long each CE+PE pair stayed on before the strike rolled or the d
 
 clip_pct = st.slider("Clip outliers above percentile", 80, 100, 98)
 fig = go.Figure()
-for underlier, color in theme.UNDERLIER_COLOR.items():
+for underlier in theme.UNDERLIER_COLOR:
     d = holding.loc[holding["underlier"] == underlier, "duration_sec"]
     if d.empty:
         continue
     cap = np.percentile(d, clip_pct)
     fig.add_trace(go.Histogram(
-        x=d[d <= cap], name=underlier, marker_color=color, opacity=0.65, nbinsx=60,
+        x=d[d <= cap], name=underlier, marker_color=theme.underlier_color(underlier), opacity=0.65, nbinsx=60,
         hovertemplate="Duration: %{x:.0f}s<br>Count: %{y}<extra></extra>",
     ))
 fig.update_layout(barmode="overlay")
@@ -73,7 +84,7 @@ scatter.add_trace(go.Scatter(
     x=summary["Total Trades Executed (Rolls)"], y=summary["Total PnL"],
     mode="markers",
     marker=dict(size=10, color=theme.pnl_bar_colors(summary["Total PnL"]),
-                line=dict(width=1, color="#ffffff")),
+                line=dict(width=1, color=theme.surface_color())),
     text=summary["Date"].dt.strftime("%Y-%m-%d"),
     hovertemplate="%{text}<br>Rolls: %{x}<br>PnL: %{y:,.0f}<extra></extra>",
 ))

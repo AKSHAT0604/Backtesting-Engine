@@ -11,9 +11,19 @@ if not ui.ensure_results_or_prompt(strategy_key):
     st.stop()
 st.caption(f"Strategy: **{data.get_strategy_registry()[strategy_key].name}**")
 
+view = ui.render_view_filter(strategy_key)
+
 cum = data.get_full_cumulative_mtm(strategy_key)
+cum = cum[ui.mask_by_view(cum["timestamp"], view)]
 legs = data.leg_pnl_summary(strategy_key)
+legs = legs[ui.mask_by_view(legs["trade_date"], view)]
 summary = data.load_daily_summary(strategy_key)
+summary = summary[ui.mask_by_view(summary["Date"], view)]
+ui.render_view_caption(view)
+
+if summary.empty or cum.empty:
+    st.warning("No trading days fall inside the selected window. Widen the range in the sidebar.")
+    st.stop()
 
 # ---------------------------------------------------------------------------
 # NIFTY vs BANKNIFTY cumulative
@@ -21,10 +31,10 @@ summary = data.load_daily_summary(strategy_key)
 st.subheader("Cumulative PnL — NIFTY vs BANKNIFTY")
 fig = go.Figure()
 fig.add_trace(go.Scatter(x=cum["timestamp"], y=cum["nifty_cumulative"], name="NIFTY",
-                          mode="lines", line=dict(color=theme.UNDERLIER_COLOR["NIFTY"], width=2),
+                          mode="lines", line=dict(color=theme.underlier_color("NIFTY"), width=2),
                           hovertemplate="%{x|%d %b %H:%M}<br>NIFTY: %{y:,.0f}<extra></extra>"))
 fig.add_trace(go.Scatter(x=cum["timestamp"], y=cum["banknifty_cumulative"], name="BANKNIFTY",
-                          mode="lines", line=dict(color=theme.UNDERLIER_COLOR["BANKNIFTY"], width=2),
+                          mode="lines", line=dict(color=theme.underlier_color("BANKNIFTY"), width=2),
                           hovertemplate="%{x|%d %b %H:%M}<br>BANKNIFTY: %{y:,.0f}<extra></extra>"))
 theme.apply_base_layout(fig, y_title="PnL", height=380)
 st.plotly_chart(fig, width='stretch')
@@ -39,12 +49,12 @@ running_peak = cum["cumulative_pnl"].cummax()
 drawdown = cum["cumulative_pnl"] - running_peak
 dd_fig = go.Figure()
 dd_fig.add_trace(go.Scatter(x=cum["timestamp"], y=drawdown, mode="lines",
-                             line=dict(color=theme.NEGATIVE, width=2),
+                             line=dict(color=theme.polarity_colors()[1], width=2),
                              fill="tozeroy", fillcolor="rgba(227,73,72,0.12)",
                              hovertemplate="%{x|%d %b %H:%M}<br>Drawdown: %{y:,.0f}<extra></extra>"))
 theme.apply_base_layout(dd_fig, y_title="Drawdown", show_legend=False, height=320)
 st.plotly_chart(dd_fig, width='stretch')
-st.caption(f"Maximum drawdown over the month: **{drawdown.min():,.0f}**.")
+st.caption(f"Maximum drawdown over the window: **{drawdown.min():,.0f}**.")
 
 st.divider()
 
@@ -59,7 +69,7 @@ lc1, lc2 = st.columns(2)
 with lc1:
     pie = go.Figure(data=go.Pie(
         labels=by_leg.index, values=by_leg.values,
-        marker=dict(colors=[theme.LEG_COLOR[t] for t in by_leg.index]),
+        marker=dict(colors=[theme.leg_color(t) for t in by_leg.index]),
         hovertemplate="%{label}: %{value:,.0f}<extra></extra>",
         hole=0.45,
     ))
@@ -67,10 +77,10 @@ with lc1:
     st.plotly_chart(pie, width='stretch')
 with lc2:
     bar = go.Figure()
-    for leg_type, color in theme.LEG_COLOR.items():
+    for leg_type in theme.LEG_COLOR:
         if leg_type in by_leg_underlier.columns:
             bar.add_trace(go.Bar(x=by_leg_underlier.index, y=by_leg_underlier[leg_type],
-                                  name=leg_type, marker_color=color,
+                                  name=leg_type, marker_color=theme.leg_color(leg_type),
                                   hovertemplate="%{x} " + leg_type + ": %{y:,.0f}<extra></extra>"))
     bar.update_layout(barmode="group")
     theme.apply_base_layout(bar, title="Realized PnL by underlier and leg", y_title="PnL", height=340)

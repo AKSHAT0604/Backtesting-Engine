@@ -20,6 +20,16 @@ day-level drilldowns.
   date×hour trade-activity heatmap, turnover-vs-PnL scatter, rolls/day table.
 - **PnL Attribution** — NIFTY vs BANKNIFTY cumulative comparison, drawdown
   curve, CE vs PE realized-PnL split, best/worst days.
+- **Risk Metrics** — Sharpe/Sortino/Calmar, win rate, profit factor, max
+  drawdown duration, rolling Sharpe, and transaction-cost sensitivity
+  (gross vs. net PnL at 0/1/2/5/10/20 bps per trade).
+
+Every page (except Home's month-level KPIs, which respond to the same
+control) reads a sidebar **View** filter — Full month / Date range / Single
+day — that scopes all data on the page to that window. A sidebar **Dark
+mode** toggle switches the whole app and every chart's palette; native
+`st.dataframe` tables keep their light chrome regardless (Streamlit renders
+that grid via a canvas widget that doesn't respond to CSS).
 
 ## Run locally
 
