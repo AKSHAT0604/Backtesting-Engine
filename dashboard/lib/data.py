@@ -227,11 +227,53 @@ def rolls_per_day_by_underlier(strategy_key: str) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# Tier 2 — raw per-day ticks (strategy-independent)
+# Tier 2 — market data for the Day Drilldown overlays
+#
+# Preferred source: precomputed Parquet built once (locally, where the raw
+# dataset lives) via export_market_data.py -- this is what ships to Streamlit
+# Community Cloud, since Data/allData itself (many GB) never does. Falls back
+# to reading the raw tick files directly for local dev before that export has
+# been run.
 # ---------------------------------------------------------------------------
+
+FUTURES_INTRADAY_PATH = RESULTS_DIR / "futures_intraday.parquet"
+
+
+def futures_intraday_available() -> bool:
+    return FUTURES_INTRADAY_PATH.is_file()
+
+
+@st.cache_data(show_spinner=False)
+def _load_futures_intraday_table() -> pd.DataFrame:
+    df = pd.read_parquet(FUTURES_INTRADAY_PATH, engine="pyarrow")
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    return df
+
+
+def held_leg_prices_available(strategy_key: str) -> bool:
+    return (strategy_dir(strategy_key) / "held_leg_prices.parquet").is_file()
+
+
+@st.cache_data(show_spinner=False)
+def load_held_leg_prices(strategy_key: str) -> pd.DataFrame:
+    """Precomputed CE/PE price actually held at each second, stitched across
+    rolls -- empty DataFrame if export_market_data.py hasn't been run for
+    this strategy."""
+    path = strategy_dir(strategy_key) / "held_leg_prices.parquet"
+    if not path.is_file():
+        return pd.DataFrame(columns=["trade_date", "underlier", "option_type", "timestamp", "price"])
+    df = pd.read_parquet(path, engine="pyarrow")
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    return df
+
 
 @st.cache_data(show_spinner=False)
 def load_day_futures(trade_date: str, underlier: str) -> pd.DataFrame:
+    if futures_intraday_available():
+        table = _load_futures_intraday_table()
+        day = table[(table["trade_date"] == trade_date) & (table["underlier"] == underlier)]
+        return day[["timestamp", "price"]]
+
     folder = "NSE_" + trade_date.replace("-", "")
     path = DATA_ROOT / folder / "Futures (Continuous)" / f"{underlier}-I.csv"
     if not path.is_file():

@@ -67,14 +67,19 @@ by_leg_underlier = legs.groupby(["underlier", "option_type"])["realized_pnl"].su
 
 lc1, lc2 = st.columns(2)
 with lc1:
-    pie = go.Figure(data=go.Pie(
-        labels=by_leg.index, values=by_leg.values,
-        marker=dict(colors=[theme.leg_color(t) for t in by_leg.index]),
-        hovertemplate="%{label}: %{value:,.0f}<extra></extra>",
-        hole=0.45,
+    # A pie/donut can't represent this: realized PnL is signed, and both legs
+    # are commonly net losses (whipsaw churn) -- a pie needs a positive whole.
+    # A horizontal bar handles negative values honestly, same as the panel
+    # on the right.
+    leg_bar = go.Figure()
+    leg_bar.add_trace(go.Bar(
+        x=by_leg.values, y=by_leg.index, orientation="h",
+        marker_color=[theme.leg_color(t) for t in by_leg.index],
+        hovertemplate="%{y}: %{x:,.0f}<extra></extra>",
     ))
-    theme.apply_base_layout(pie, title="Realized PnL share by leg type", height=340)
-    st.plotly_chart(pie, width='stretch')
+    theme.apply_base_layout(leg_bar, title="Realized PnL by leg type", x_title="PnL",
+                             show_legend=False, height=340)
+    st.plotly_chart(leg_bar, width='stretch')
 with lc2:
     bar = go.Figure()
     for leg_type in theme.LEG_COLOR:

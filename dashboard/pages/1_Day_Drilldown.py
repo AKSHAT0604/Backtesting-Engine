@@ -100,8 +100,8 @@ st.divider()
 # ---------------------------------------------------------------------------
 st.subheader("Futures price vs. selected strike")
 
-if not data.raw_data_available():
-    st.warning("Raw tick data (Data/allData) not found — this overlay needs the source dataset.")
+if not (data.futures_intraday_available() or data.raw_data_available()):
+    st.warning("Futures tick data not found — neither the precomputed export nor Data/allData is present.")
 else:
     strike_underliers = ["NIFTY", "BANKNIFTY"] if underlier_view == "Combined" else [underlier_view]
     for u in strike_underliers:
@@ -127,52 +127,83 @@ else:
 st.divider()
 
 # ---------------------------------------------------------------------------
-# Held CE / PE leg prices (optional — costs raw I/O per distinct instrument)
+# Held CE / PE leg prices
+#
+# Preferred path: read the precomputed held_leg_prices.parquet (instant,
+# works with or without Data/allData). Falls back to reading raw tick files
+# live, gated behind a checkbox, only when that export hasn't been run.
 # ---------------------------------------------------------------------------
 st.subheader("Held CE / PE leg price (stitched across rolls)")
-load_legs = st.checkbox(
-    "Load held-option leg prices for this day",
-    value=(n_rolls <= 40),
-    help="Reads the raw tick file for every distinct instrument held that day. "
-         "Unchecked by default on high-turnover days to avoid a slow first load.",
-)
 
-if load_legs and data.raw_data_available():
+held_precomputed = data.load_held_leg_prices(strategy_key)
+
+if not held_precomputed.empty:
     leg_underliers = ["NIFTY", "BANKNIFTY"] if underlier_view == "Combined" else [underlier_view]
     for u in leg_underliers:
-        u_positions = positions[(positions["trade_date"] == selected_date)
-                                 & (positions["underlier"] == u)
-                                 & (positions["state"] == "HOLDING")].sort_values("timestamp")
-        if u_positions.empty:
+        day_legs = held_precomputed[(held_precomputed["trade_date"] == selected_date)
+                                     & (held_precomputed["underlier"] == u)]
+        if day_legs.empty:
+            st.caption(f"No held-leg data for {u} on {selected_date}.")
             continue
-        u_positions = u_positions.copy()
-        u_positions["next_timestamp"] = u_positions["timestamp"].shift(-1)
-
-        ce_parts, pe_parts = [], []
-        with st.spinner(f"Loading {u} leg prices..."):
-            for _, row in u_positions.iterrows():
-                end = row["next_timestamp"] if pd.notna(row["next_timestamp"]) else pd.Timestamp.max
-                ce_px = data.load_day_instrument(selected_date, row["ce_instrument"])
-                pe_px = data.load_day_instrument(selected_date, row["pe_instrument"])
-                ce_parts.append(ce_px[(ce_px["timestamp"] >= row["timestamp"]) & (ce_px["timestamp"] < end)])
-                pe_parts.append(pe_px[(pe_px["timestamp"] >= row["timestamp"]) & (pe_px["timestamp"] < end)])
-
-        ce_all = pd.concat(ce_parts, ignore_index=True) if ce_parts else pd.DataFrame()
-        pe_all = pd.concat(pe_parts, ignore_index=True) if pe_parts else pd.DataFrame()
+        ce = day_legs[day_legs["option_type"] == "CE"]
+        pe = day_legs[day_legs["option_type"] == "PE"]
 
         f3 = go.Figure()
-        if not ce_all.empty:
-            f3.add_trace(go.Scatter(x=ce_all["timestamp"], y=ce_all["price"], name="CE (held)",
+        if not ce.empty:
+            f3.add_trace(go.Scatter(x=ce["timestamp"], y=ce["price"], name="CE (held)",
                                      mode="lines", line=dict(color=theme.leg_color("CE"), width=1.5),
                                      hovertemplate="%{x|%H:%M:%S}<br>CE: %{y:,.2f}<extra></extra>"))
-        if not pe_all.empty:
-            f3.add_trace(go.Scatter(x=pe_all["timestamp"], y=pe_all["price"], name="PE (held)",
+        if not pe.empty:
+            f3.add_trace(go.Scatter(x=pe["timestamp"], y=pe["price"], name="PE (held)",
                                      mode="lines", line=dict(color=theme.leg_color("PE"), width=1.5),
                                      hovertemplate="%{x|%H:%M:%S}<br>PE: %{y:,.2f}<extra></extra>"))
         theme.apply_base_layout(f3, title=u, y_title="Option price", height=340)
         st.plotly_chart(f3, width='stretch')
-elif load_legs:
-    st.warning("Raw tick data (Data/allData) not found.")
+
+elif data.raw_data_available():
+    load_legs = st.checkbox(
+        "Load held-option leg prices for this day",
+        value=(n_rolls <= 40),
+        help="No precomputed export found for this strategy — reads the raw tick "
+             "file for every distinct instrument held that day instead. Unchecked "
+             "by default on high-turnover days to avoid a slow first load.",
+    )
+    if load_legs:
+        leg_underliers = ["NIFTY", "BANKNIFTY"] if underlier_view == "Combined" else [underlier_view]
+        for u in leg_underliers:
+            u_positions = positions[(positions["trade_date"] == selected_date)
+                                     & (positions["underlier"] == u)
+                                     & (positions["state"] == "HOLDING")].sort_values("timestamp")
+            if u_positions.empty:
+                continue
+            u_positions = u_positions.copy()
+            u_positions["next_timestamp"] = u_positions["timestamp"].shift(-1)
+
+            ce_parts, pe_parts = [], []
+            with st.spinner(f"Loading {u} leg prices..."):
+                for _, row in u_positions.iterrows():
+                    end = row["next_timestamp"] if pd.notna(row["next_timestamp"]) else pd.Timestamp.max
+                    ce_px = data.load_day_instrument(selected_date, row["ce_instrument"])
+                    pe_px = data.load_day_instrument(selected_date, row["pe_instrument"])
+                    ce_parts.append(ce_px[(ce_px["timestamp"] >= row["timestamp"]) & (ce_px["timestamp"] < end)])
+                    pe_parts.append(pe_px[(pe_px["timestamp"] >= row["timestamp"]) & (pe_px["timestamp"] < end)])
+
+            ce_all = pd.concat(ce_parts, ignore_index=True) if ce_parts else pd.DataFrame()
+            pe_all = pd.concat(pe_parts, ignore_index=True) if pe_parts else pd.DataFrame()
+
+            f3 = go.Figure()
+            if not ce_all.empty:
+                f3.add_trace(go.Scatter(x=ce_all["timestamp"], y=ce_all["price"], name="CE (held)",
+                                         mode="lines", line=dict(color=theme.leg_color("CE"), width=1.5),
+                                         hovertemplate="%{x|%H:%M:%S}<br>CE: %{y:,.2f}<extra></extra>"))
+            if not pe_all.empty:
+                f3.add_trace(go.Scatter(x=pe_all["timestamp"], y=pe_all["price"], name="PE (held)",
+                                         mode="lines", line=dict(color=theme.leg_color("PE"), width=1.5),
+                                         hovertemplate="%{x|%H:%M:%S}<br>PE: %{y:,.2f}<extra></extra>"))
+            theme.apply_base_layout(f3, title=u, y_title="Option price", height=340)
+            st.plotly_chart(f3, width='stretch')
+else:
+    st.warning("Held-leg price data not found — neither the precomputed export nor Data/allData is present.")
 
 st.divider()
 
