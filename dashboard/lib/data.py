@@ -77,6 +77,21 @@ def _read_table(base: Path) -> pd.DataFrame:
     return pd.read_csv(base.with_suffix(".csv"))
 
 
+def _normalize_timestamp(df: pd.DataFrame, col: str = "timestamp") -> pd.DataFrame:
+    """Force `col` to a fixed datetime64[ns] dtype in place.
+
+    Different export scripts (export_parquet.py vs export_market_data.py)
+    round-trip timestamps through pyarrow at different resolutions
+    (datetime64[us] vs [ns]); `pd.to_datetime` on an already-datetime64
+    column is a no-op on modern pandas and does NOT reconcile that. Every
+    timestamp column in the app must go through this so pd.merge_asof (which
+    requires an exact dtype match on the "on" column) never sees a mismatch,
+    regardless of which loader/source produced either side.
+    """
+    df[col] = pd.to_datetime(df[col]).astype("datetime64[ns]")
+    return df
+
+
 # ---------------------------------------------------------------------------
 # Tier 1 — precomputed per-strategy results
 # ---------------------------------------------------------------------------
@@ -84,7 +99,7 @@ def _read_table(base: Path) -> pd.DataFrame:
 @st.cache_data
 def load_trades(strategy_key: str) -> pd.DataFrame:
     df = _read_table(strategy_dir(strategy_key) / "trades")
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    _normalize_timestamp(df)
     if "option_type" not in df.columns:
         df["option_type"] = df["instrument_name"].str[-2:]
     return df
@@ -93,14 +108,14 @@ def load_trades(strategy_key: str) -> pd.DataFrame:
 @st.cache_data
 def load_positions(strategy_key: str) -> pd.DataFrame:
     df = _read_table(strategy_dir(strategy_key) / "positions_timeline")
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    _normalize_timestamp(df)
     return df
 
 
 @st.cache_data
 def load_mtm(strategy_key: str) -> pd.DataFrame:
     df = _read_table(strategy_dir(strategy_key) / "mtm_timeline")
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    _normalize_timestamp(df)
     return df
 
 
@@ -246,7 +261,7 @@ def futures_intraday_available() -> bool:
 @st.cache_data(show_spinner=False)
 def _load_futures_intraday_table() -> pd.DataFrame:
     df = pd.read_parquet(FUTURES_INTRADAY_PATH, engine="pyarrow")
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    _normalize_timestamp(df)
     return df
 
 
@@ -263,7 +278,7 @@ def load_held_leg_prices(strategy_key: str) -> pd.DataFrame:
     if not path.is_file():
         return pd.DataFrame(columns=["trade_date", "underlier", "option_type", "timestamp", "price"])
     df = pd.read_parquet(path, engine="pyarrow")
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    _normalize_timestamp(df)
     return df
 
 
@@ -279,7 +294,7 @@ def load_day_futures(trade_date: str, underlier: str) -> pd.DataFrame:
     if not path.is_file():
         return pd.DataFrame(columns=["timestamp", "price"])
     df = load_futures_file(path, trade_date, underlier)
-    return df[["timestamp", "price"]]
+    return _normalize_timestamp(df[["timestamp", "price"]].copy())
 
 
 @st.cache_data(show_spinner=False)
@@ -289,7 +304,7 @@ def load_day_instrument(trade_date: str, instrument_name: str) -> pd.DataFrame:
     if not path.is_file():
         return pd.DataFrame(columns=["timestamp", "price"])
     df = load_futures_file(path, trade_date, instrument_name)
-    return df[["timestamp", "price"]]
+    return _normalize_timestamp(df[["timestamp", "price"]].copy())
 
 
 def raw_data_available() -> bool:
