@@ -5,7 +5,7 @@ there (docs/report_assets/*.png). Not part of the pipeline or the dashboard —
 purely a report-authoring aid, kept for reproducibility of the report's figures.
 
 Usage:
-    python generate_report_assets.py
+    python scripts/generate_report_assets.py
 """
 
 from __future__ import annotations
@@ -19,13 +19,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "engine"))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "engine"))
 from data_paths import results_dir  # noqa: E402
 
 RESULTS_DIR = results_dir()
 STRATEGY = "closest_strike_straddle"
 STRAT_DIR = RESULTS_DIR / "strategies" / STRATEGY
-ASSETS_DIR = Path(__file__).resolve().parent / "docs" / "report_assets"
+ASSETS_DIR = REPO_ROOT / "docs" / "report_assets"
 ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Palette -- matches dashboard/lib/theme.py exactly, hardcoded here to keep
@@ -109,7 +110,7 @@ def savefig(fig, name):
     fig.tight_layout()
     fig.savefig(path, dpi=150)
     plt.close(fig)
-    print(f"  saved {path.relative_to(Path(__file__).resolve().parent)}")
+    print(f"  saved {path.relative_to(REPO_ROOT)}")
 
 
 def main():

@@ -60,7 +60,7 @@ flowchart TD
     MT --> REP
     REP --> DS["daily_summary.csv"]
 
-    TR --> ASSET["generate_report_assets.py"]
+    TR --> ASSET["scripts/generate_report_assets.py"]
     PT --> ASSET
     MT --> ASSET
     DS --> ASSET
@@ -155,7 +155,7 @@ price, selected strike, and fill could be checked by hand, and
 timestamps, flat day, whipsaw day, already-flat square-off) — all 5 pass.
 
 **Step 11 — produce the charts and this report.**
-`generate_report_assets.py` reads the final `results/strategies/closest_strike_straddle/`
+`scripts/generate_report_assets.py` reads the final `results/strategies/closest_strike_straddle/`
 files and produces the 9 chart images in `docs/report_assets/` used below,
 printing the exact headline numbers cited alongside them.
 
@@ -171,7 +171,7 @@ stated otherwise.
 
 ![Cumulative PnL](docs/report_assets/01_cumulative_pnl.png)
 
-**Flow:** `mtm_timeline.csv` (Step 8) → `generate_report_assets.py` shifts each
+**Flow:** `mtm_timeline.csv` (Step 8) → `scripts/generate_report_assets.py` shifts each
 day's per-second series up by every prior day's closing PnL (since
 `mtm_timeline.csv` resets to zero at the start of each day, per rule 2 — no
 overnight carry) → this chart.
@@ -320,15 +320,17 @@ near-continuous rolling), not a data or execution bug.
 
 Reproduce this table and every image above with:
 ```bash
-python generate_report_assets.py
+python scripts/generate_report_assets.py
 ```
 
 ---
 
 ## 6. Assumptions & limitations (brief)
 
-Full rule set: [`SPEC.md`](../SPEC.md). Full resolved-edge-case list:
-[`ASSUMPTIONS.md`](../ASSUMPTIONS.md). The load-bearing ones:
+Full rule set: [`docs/SPEC.md`](docs/SPEC.md). Full resolved-edge-case list:
+[`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.md). The original phase-by-phase
+execution plan §2 above follows: [`docs/backtest-workflow-plan.md`](docs/backtest-workflow-plan.md).
+The load-bearing assumptions:
 
 - 1-second grid `09:15:00`–`15:29:59`; last tick per second wins; forward-fill;
   no price before an instrument's first tick.

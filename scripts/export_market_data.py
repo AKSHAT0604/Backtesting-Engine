@@ -18,7 +18,7 @@ Requires the raw dataset (Data/allData/) locally -- run this once wherever the
 raw data lives; only the (much smaller) Parquet outputs get committed.
 
 Usage:
-    python export_market_data.py
+    python scripts/export_market_data.py
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from pathlib import Path
 
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "engine"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "engine"))
 from data_paths import resolve_data_root, results_dir  # noqa: E402
 from futures_loader import load_all_futures, load_futures_file  # noqa: E402
 from strategies import get_registry  # noqa: E402

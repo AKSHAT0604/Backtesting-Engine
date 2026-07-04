@@ -143,18 +143,20 @@ through the identical engine right now.
 ```text
 Backtesting-Engine/
   run_strategy.py         # main entry point (run one/all strategies)
-  export_parquet.py       # deployment prep: heavy CSVs -> compressed Parquet
-  export_market_data.py   # deployment prep: precompute the two raw-tick-dependent charts
   README.md                # this report
+  REPORT.md                # flowchart-first companion report
   backtest_report.ipynb   # static matplotlib notebook (superseded by the dashboard)
   engine/                  # every importable module, incl. engine/strategies/
   data_cleaning/           # Phase 1-2 standalone scripts (inventory, parsing, expiry)
+  scripts/                 # deployment-prep and report-asset utility scripts
   tests/                   # unit / edge-case / single-day debug harnesses
   redundant/               # superseded or one-off scripts, kept to show the dev process
-  docs/                    # DELIVERABLES.md, EDGE_CASES.md, report_assets/ (this doc's images)
+  docs/                    # SPEC.md, ASSUMPTIONS.md, DELIVERABLES.md, EDGE_CASES.md, report_assets/
   dashboard/               # Streamlit + Plotly analysis portal
   results/                 # generated outputs (+ results/strategies/<key>/)
 ```
+
+`scripts/` holds the three utilities that run *after* the core backtest: `export_parquet.py` (heavy CSVs → compressed Parquet for deployment), `export_market_data.py` (precomputes the two raw-tick-dependent Day Drilldown charts), and `generate_report_assets.py` (renders the chart images and headline numbers used in §4 below).
 
 `engine/data_paths.py` is the single source of truth for locating `results/`
 and the raw dataset, resolved relative to its own file location — this is what
@@ -168,7 +170,7 @@ dataset does not exist at all (§8).
 
 Everything below is the **`closest_strike_straddle`** strategy — the literal
 assignment strategy — across all 21 trading days, both underliers. Every
-number here is reproducible: `python generate_report_assets.py` regenerates
+number here is reproducible: `python scripts/generate_report_assets.py` regenerates
 both these images and the headline numbers from `results/strategies/closest_strike_straddle/`.
 
 ### 4.1 Cumulative mark-to-market PnL
@@ -337,9 +339,11 @@ that dominates the assignment strategy's losses.)
 
 ## 7. Assumptions & limitations
 
-The full, numbered rule set is **[`../SPEC.md`](../SPEC.md)**; the 20 resolved
-edge-case decisions are **[`../ASSUMPTIONS.md`](../ASSUMPTIONS.md)** (both at
-the repository root). The load-bearing ones:
+The full, numbered rule set is **[`docs/SPEC.md`](docs/SPEC.md)**; the 20
+resolved edge-case decisions are **[`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.md)**;
+the original day-by-day execution plan this project followed is
+**[`docs/backtest-workflow-plan.md`](docs/backtest-workflow-plan.md)**. The
+load-bearing assumptions:
 
 - 1-second grid `09:15:00`–`15:29:59` (22,500 seconds/day); last tick per
   second wins; forward-fill; no price exists before an instrument's first tick.
@@ -387,12 +391,12 @@ files — no separate computation, just different views of the same
 **Deployment note:** the live dashboard runs on Streamlit Community Cloud from
 this repository without the raw ~GB-scale dataset present at all. The four
 per-strategy result files are shipped as compressed Parquet
-(`export_parquet.py`), and the two charts that would otherwise need live access
-to raw tick files (the futures overlay and the held-leg price chart) instead
-read from small precomputed Parquet artifacts built once locally
-(`export_market_data.py`) — the dashboard prefers these precomputed files and
-only falls back to reading raw ticks live when running somewhere the full
-dataset actually exists.
+(`scripts/export_parquet.py`), and the two charts that would otherwise need
+live access to raw tick files (the futures overlay and the held-leg price
+chart) instead read from small precomputed Parquet artifacts built once
+locally (`scripts/export_market_data.py`) — the dashboard prefers these
+precomputed files and only falls back to reading raw ticks live when running
+somewhere the full dataset actually exists.
 
 If you'd rather read numbers than click through pages, this report already
 covers the same ground in §4.
@@ -417,9 +421,9 @@ python run_strategy.py --strategy closest_strike_straddle
 python run_strategy.py --list
 
 # 4. (Optional, needs the raw dataset) regenerate the deployment/report artifacts
-python export_parquet.py
-python export_market_data.py
-python generate_report_assets.py
+python scripts/export_parquet.py
+python scripts/export_market_data.py
+python scripts/generate_report_assets.py
 
 # 5. Launch the interactive portal
 cd dashboard && streamlit run Home.py
@@ -455,6 +459,7 @@ Dashboard internals: **[`dashboard/README.md`](dashboard/README.md)**.
 
 ---
 
-*Governing documents: [`../SPEC.md`](../SPEC.md) (the 11 rules),
-[`../ASSUMPTIONS.md`](../ASSUMPTIONS.md) (the 20 resolved edge cases),
-[`docs/DELIVERABLES.md`](docs/DELIVERABLES.md) (output schemas).*
+*Governing documents: [`docs/SPEC.md`](docs/SPEC.md) (the 11 rules),
+[`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.md) (the 20 resolved edge cases),
+[`docs/DELIVERABLES.md`](docs/DELIVERABLES.md) (output schemas),
+[`docs/backtest-workflow-plan.md`](docs/backtest-workflow-plan.md) (the original execution plan).*

@@ -16,7 +16,7 @@ Parquet copies are what get committed to the deployment repo (see .gitignore);
 the CSVs stay local, regenerable at any time via `python run_strategy.py --all`.
 
 Usage:
-    python export_parquet.py
+    python scripts/export_parquet.py
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "engine"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "engine"))
 from data_paths import results_dir  # noqa: E402
 
 FILES = ["trades.csv", "positions_timeline.csv", "mtm_timeline.csv", "daily_summary.csv"]
